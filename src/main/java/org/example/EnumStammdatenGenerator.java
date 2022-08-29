@@ -1,10 +1,23 @@
 package org.example;
 
+import org.apache.maven.plugin.AbstractMojo;
+import org.apache.maven.plugin.ContextEnabled;
+import org.apache.maven.plugin.MojoExecutionException;
+import org.apache.maven.plugin.MojoFailureException;
+import org.apache.maven.plugin.logging.Log;
+import org.apache.maven.plugins.annotations.Mojo;
+import org.apache.maven.plugins.annotations.Parameter;
+import org.jooq.ForeignKey;
+import org.jooq.UniqueKey;
+import org.jooq.codegen.GeneratorStrategy;
 import org.jooq.codegen.JavaGenerator;
 import org.jooq.codegen.JavaWriter;
+import org.jooq.meta.ConstraintDefinition;
 import org.jooq.meta.Database;
+import org.jooq.meta.ForeignKeyDefinition;
 import org.jooq.meta.SchemaDefinition;
 import org.jooq.meta.TableDefinition;
+import org.jooq.meta.UniqueKeyDefinition;
 import org.jooq.tools.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -13,17 +26,26 @@ import java.io.File;
 import java.io.IOException;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
-import java.util.function.Function;
+import java.util.Properties;
+import java.util.Set;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 public class EnumStammdatenGenerator extends JavaGenerator {
 
-    private static final Predicate<TableDefinition> TRIGGER_STAMMDATEN_GENERATION = tableDefinition -> tableDefinition.getName().toLowerCase().contains("stammdaten");
-
     private static final Logger log = LoggerFactory.getLogger(EnumStammdatenGenerator.class);
+
+    private Set<String> getTableNameTriggers(Properties properties) {
+        return new HashSet<>(properties.keySet()).stream()
+                .map(properties::get)
+                .map(Object::toString)
+                .collect(Collectors.toSet());
+    }
 
     /**
      * Generates enum from master tables.<br>
@@ -40,10 +62,12 @@ public class EnumStammdatenGenerator extends JavaGenerator {
     protected void generateSchema(SchemaDefinition schema) {
         log.info("Generating enums");
         log.info("--------------------------------------");
-
         Database db = schema.getDatabase();
+        Properties properties = db.getProperties();
+        log.info(properties.toString());
+        Set<String> tableNameTriggers = getTableNameTriggers(db.getProperties());
         db.getTables(schema).stream()
-                .filter(TRIGGER_STAMMDATEN_GENERATION)
+                .filter(tableDefinition -> tableNameTriggers.stream().anyMatch(tableNameTrigger -> tableDefinition.getName().equalsIgnoreCase(tableNameTrigger)))
                 .forEach(tableDefinition -> {
                     //preliminary checks
                     if(tableDefinition.getPrimaryKey().getKeyColumns().size() != 1) {
@@ -78,27 +102,29 @@ public class EnumStammdatenGenerator extends JavaGenerator {
                                 // this is the primary key for this master data table
                                 if(tableDefinition.getColumn(resultSet.getMetaData().getColumnLabel(col)).getPrimaryKey() != null) {
                                     String name = resultSet.getString(col).toUpperCase();
+                                    name = toValidJavaEnumName(name);
                                     out.print(String.format("%s(", name));
                                     continue;
                                 }
                                 //this is any additional column belonging to the enums constructor parameter
                                 String delimiter = col == colCount ? "" : ", ";
                                 String columnClassName = Class.forName(resultSet.getMetaData().getColumnClassName(col)).getSimpleName();
-                                if(columnClassName.equals("Clob")) {
-                                    variableTypes.put(StringUtils.toLC(resultSet.getMetaData().getColumnLabel(col)), "String");
+                                log.info(columnClassName);
+                                String columnLabel = resultSet.getMetaData().getColumnLabel(col);
+                                if(columnClassName.equals("Clob") || columnClassName.equals("String")) {
+                                    variableTypes.put(StringUtils.toLC(columnLabel), "String");
                                     out.print(String.format("\"%s\"", column));
                                 }
                                 else if(columnClassName.equals("Byte")) {
-                                    variableTypes.put(StringUtils.toLC(resultSet.getMetaData().getColumnLabel(col)), "boolean");
+                                    variableTypes.put(StringUtils.toLC(columnLabel), "boolean");
                                     boolean toWrite = Byte.parseByte(column) != 0;
                                     out.print(Boolean.toString(toWrite));
                                 }
                                 else {
-                                    variableTypes.put(StringUtils.toLC(resultSet.getMetaData().getColumnLabel(col)), columnClassName);
+                                    variableTypes.put(StringUtils.toLC(columnLabel), columnClassName);
                                     out.print(column);
                                 }
                                 out.print(delimiter);
-
                             }
                             String s = resultSet.isLast() ? ";" : ",";
                             out.println(String.format(")%s", s));
@@ -141,12 +167,26 @@ public class EnumStammdatenGenerator extends JavaGenerator {
                         out.println("}");
 
                         closeJavaWriter(out);
-
-                        log.info("--------------------------------------");
-                        super.generateSchema(schema);
                     } catch (SQLException | ClassNotFoundException e) {
                         e.printStackTrace();
                     }
         });
+
+        log.info("--------------------------------------");
+
+        super.generateSchema(schema);
+    }
+
+    private String toValidJavaEnumName(String name) {
+        if(!Character.isJavaIdentifierStart(name.charAt(0))) {
+            name = "_" + name;
+        }
+        char[] nameArray = name.toCharArray();
+        for(int i=0; i<nameArray.length; i++) {
+            if(!Character.isJavaIdentifierPart(nameArray[i])) {
+                nameArray[i] = '_';
+            }
+        }
+        return String.copyValueOf(nameArray);
     }
 }
