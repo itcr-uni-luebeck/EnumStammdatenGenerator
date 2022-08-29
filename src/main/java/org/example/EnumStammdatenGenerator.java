@@ -1,23 +1,9 @@
 package org.example;
 
-import org.apache.maven.plugin.AbstractMojo;
-import org.apache.maven.plugin.ContextEnabled;
-import org.apache.maven.plugin.MojoExecutionException;
-import org.apache.maven.plugin.MojoFailureException;
-import org.apache.maven.plugin.logging.Log;
-import org.apache.maven.plugins.annotations.Mojo;
-import org.apache.maven.plugins.annotations.Parameter;
-import org.jooq.ForeignKey;
-import org.jooq.UniqueKey;
-import org.jooq.codegen.GeneratorStrategy;
 import org.jooq.codegen.JavaGenerator;
 import org.jooq.codegen.JavaWriter;
-import org.jooq.meta.ConstraintDefinition;
 import org.jooq.meta.Database;
-import org.jooq.meta.ForeignKeyDefinition;
 import org.jooq.meta.SchemaDefinition;
-import org.jooq.meta.TableDefinition;
-import org.jooq.meta.UniqueKeyDefinition;
 import org.jooq.tools.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -26,14 +12,11 @@ import java.io.File;
 import java.io.IOException;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
-import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 public class EnumStammdatenGenerator extends JavaGenerator {
