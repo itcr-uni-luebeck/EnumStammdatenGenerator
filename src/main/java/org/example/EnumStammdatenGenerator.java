@@ -13,12 +13,9 @@ import java.io.File;
 import java.io.IOException;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.util.HashSet;
-import java.util.LinkedHashMap;
-import java.util.Map;
-import java.util.Properties;
-import java.util.Set;
+import java.util.*;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 public class EnumStammdatenGenerator extends JavaGenerator {
 
@@ -96,7 +93,9 @@ public class EnumStammdatenGenerator extends JavaGenerator {
                     // this is the primary key for this master data table
                     if(tableDefinition.getColumn(resultSet.getMetaData().getColumnLabel(col)).getPrimaryKey() != null) {
                         String name = resultSet.getString(col);//.toUpperCase();
-                        name = toValidJavaEnumName(name); //TODO: if this method changes anything a custom converter will be required at runtime for mapping.
+                        if(!isValidJavaEnumName(name)) {
+                            throw new IllegalStateException(String.format("%s cannot be mapped to a valid java enum name. Only use strings which can be directly translated into java enums", name));
+                        }
                         out.print(String.format("%s(", name));
                         continue;
                     }
@@ -168,16 +167,9 @@ public class EnumStammdatenGenerator extends JavaGenerator {
         }
     }
 
-    private String toValidJavaEnumName(String name) {
-        if(!Character.isJavaIdentifierStart(name.charAt(0))) {
-            name = "_" + name;
-        }
-        char[] nameArray = name.toCharArray();
-        for(int i=0; i<nameArray.length; i++) {
-            if(!Character.isJavaIdentifierPart(nameArray[i])) {
-                nameArray[i] = '_';
-            }
-        }
-        return String.copyValueOf(nameArray);
+    private boolean isValidJavaEnumName(String name) {
+        return !name.isEmpty()
+                && Character.isJavaIdentifierStart(name.charAt(0))
+                && name.chars().allMatch(Character::isJavaIdentifierPart);
     }
 }
